@@ -1,0 +1,20 @@
+{
+  "name": "essensroulette",
+  "version": "1.0.0",
+  "description": "Zufallsauswahl-App (Glücksrad & CS:GO Case Opening) mit Firebase v9+ & Capacitor",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-www.js",
+    "sync": "npm run build && npx cap sync",
+    "android": "npm run build && npx cap sync android && npx cap open android",
+    "serve": "python -m http.server 5500"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "firebase": "^11.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0"
+  }
+}

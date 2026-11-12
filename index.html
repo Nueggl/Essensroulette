@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f111a" />
+  <title>Essensroulette – Zufallsauswahl</title>
+
+  <!-- Import Map für Firebase v9+ Modular SDK (funktioniert direkt im Browser, Capacitor & mit Bundlern) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js"
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- Dezente Hintergrund-Lichtflächen -->
+  <div class="ambient-bg" aria-hidden="true">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <div class="app-shell">
+    <!-- Obere schwebende Kopfzeile -->
+    <header class="top-bar floating-surface">
+      <button id="btn-menu" class="icon-btn" aria-label="Menü öffnen">
+        <span class="hamburger-lines">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </button>
+
+      <div id="btn-edit-title" class="header-title-wrap" title="Tippen zum Umbenennen">
+        <h1 id="list-title" class="list-title">Lade Liste…</h1>
+        <span id="header-code-badge" class="code-pill">#-----</span>
+      </div>
+
+      <button id="btn-share" class="share-pill-btn" aria-label="Liste teilen">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"></circle>
+          <circle cx="6" cy="12" r="3"></circle>
+          <circle cx="18" cy="19" r="3"></circle>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+        </svg>
+        <span>Teilen</span>
+      </button>
+    </header>
+
+    <!-- Hinweis-Banner falls DEIN_API_KEY noch nicht ersetzt wurde -->
+    <div id="demo-banner" class="demo-banner floating-surface hidden">
+      <span class="demo-dot"></span>
+      <span>Lokaler Demo-Modus aktiv (Trage deine Keys in <code>firebase-config.js</code> ein für Live-Firestore)</span>
+    </div>
+
+    <!-- Hauptbereich: Einträge der aktuellen Liste -->
+    <main class="main-content">
+      <div class="entries-header">
+        <span id="entries-count" class="entries-count">0 Einträge</span>
+      </div>
+
+      <!-- Liste der schwebenden Karten -->
+      <div id="entries-list" class="entries-list"></div>
+
+      <!-- Leerzustand wenn noch keine Einträge vorhanden sind -->
+      <div id="empty-state" class="empty-state floating-surface hidden">
+        <div class="empty-icon">🎲</div>
+        <h2>Noch keine Einträge</h2>
+        <p>Tippe unten rechts auf das <strong>+</strong> oder wähle Schnell-Ideen aus, um deine Liste zu füllen.</p>
+        <div class="quick-chips">
+          <button class="chip-btn" data-quick="Pizza 🍕">🍕 Pizza</button>
+          <button class="chip-btn" data-quick="Burger 🍔">🍔 Burger</button>
+          <button class="chip-btn" data-quick="Sushi 🍣">🍣 Sushi</button>
+          <button class="chip-btn" data-quick="Pasta 🍝">🍝 Pasta</button>
+          <button class="chip-btn" data-quick="Tacos 🌮">🌮 Tacos</button>
+          <button class="chip-btn" data-quick="Döner 🥙">🥙 Döner</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Untere schwebende Aktionsleiste: Modus-Umschalter + Start-Button + Plus-Button -->
+    <footer class="bottom-dock">
+      <div class="random-controls floating-surface">
+        <!-- Segmented Pill Switcher -->
+        <div class="mode-switcher" role="tablist" aria-label="Zufallsmechanismus wählen">
+          <button id="mode-wheel" class="mode-tab active" data-mode="wheel" role="tab" aria-selected="true">
+            <span class="mode-icon">🎡</span>
+            <span>Glücksrad</span>
+          </button>
+          <button id="mode-case" class="mode-tab" data-mode="case" role="tab" aria-selected="false">
+            <span class="mode-icon">📦</span>
+            <span>CS:GO Case</span>
+          </button>
+        </div>
+
+        <!-- Hauptbutton für die Zufallsauswahl -->
+        <button id="btn-start-random" class="start-random-btn">
+          <span id="start-btn-text">Glücksrad drehen</span>
+        </button>
+      </div>
+
+      <!-- Schwebender Plus-Button unten rechts -->
+      <button id="btn-add-entry" class="fab-add-btn" aria-label="Neuen Eintrag hinzufügen">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+  <!-- ========================================================================
+       SEITENMENÜ (DRAWER VON LINKS)
+       ======================================================================== -->
+  <div id="drawer-backdrop" class="backdrop hidden"></div>
+  <aside id="side-drawer" class="side-drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="brand-badge">
+        <span class="brand-logo">🎯</span>
+        <div>
+          <h2>Essensroulette</h2>
+          <p>Zufallsauswahl</p>
+        </div>
+      </div>
+      <button id="btn-close-drawer" class="icon-btn" aria-label="Menü schließen">✕</button>
+    </div>
+
+    <div class="drawer-body">
+      <!-- Sektion: Meine Listen -->
+      <section class="drawer-section">
+        <div class="section-title-row">
+          <h3>Meine Listen</h3>
+          <button id="btn-new-list" class="text-action-btn">+ Neue Liste</button>
+        </div>
+
+        <div id="saved-lists-container" class="saved-lists"></div>
+
+        <!-- Einer bestehenden Liste per Code beitreten -->
+        <form id="join-list-form" class="join-box floating-surface-inner">
+          <label for="join-code-input">Mit Teilen-Code beitreten</label>
+          <div class="join-input-row">
+            <input
+              id="join-code-input"
+              type="text"
+              maxlength="6"
+              placeholder="z.B. A9X2B"
+              autocomplete="off"
+            />
+            <button type="submit" class="primary-small-btn">Beitreten</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Sektion: Einstellungen -->
+      <section class="drawer-section">
+        <h3>Einstellungen</h3>
+        <div class="settings-card floating-surface-inner">
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">Vibrationen</span>
+              <span class="setting-desc">Haptisches Feedback bei Ergebnis-Auswahl</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-vibration" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">Soundeffekte</span>
+              <span class="setting-desc">Original CS:GO Case-Sound & Audio</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-sound" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       POP-UP 1: EINTRAG HINZUFÜGEN / BEARBEITEN
+       ======================================================================== -->
+  <div id="entry-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card floating-surface">
+      <h3 id="entry-modal-title">Neuer Eintrag</h3>
+      <form id="entry-form">
+        <input
+          id="entry-input"
+          type="text"
+          class="floating-input"
+          placeholder="z. B. Pizza Napoletana"
+          maxlength="80"
+          autocomplete="off"
+          required
+        />
+        <div class="modal-actions">
+          <button type="button" id="btn-cancel-entry" class="ghost-btn">Abbrechen</button>
+          <button type="submit" id="btn-save-entry" class="primary-btn">Bestätigen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       POP-UP 2: NEUE LISTE ERSTELLEN / UMBENENNEN
+       ======================================================================== -->
+  <div id="list-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card floating-surface">
+      <h3 id="list-modal-title">Neue Liste erstellen</h3>
+      <form id="list-form">
+        <input
+          id="list-title-input"
+          type="text"
+          class="floating-input"
+          placeholder="Name der Liste (z. B. Mittagessen)"
+          maxlength="50"
+          autocomplete="off"
+          required
+        />
+        <div class="modal-actions">
+          <button type="button" id="btn-cancel-list" class="ghost-btn">Abbrechen</button>
+          <button type="submit" class="primary-btn">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       POP-UP 3: LISTE TEILEN (CODE ANZEIGEN)
+       ======================================================================== -->
+  <div id="share-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card floating-surface share-modal-card">
+      <h3>Liste teilen</h3>
+      <p class="modal-sub">Mit diesem Code können andere deiner Liste in Echtzeit beitreten:</p>
+      <div id="share-code-display" class="share-code-box">A9X2B</div>
+      <div class="modal-actions">
+        <button type="button" id="btn-close-share" class="ghost-btn">Schließen</button>
+        <button type="button" id="btn-copy-code" class="primary-btn">Code kopieren</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       ZUFALLSMECHANISMUS 1: SEITLICHES GLÜCKSRAD (RECHTS NEBEN DEM BILDSCHIRM)
+       ======================================================================== -->
+  <div id="wheel-overlay" class="random-overlay hidden" aria-hidden="true">
+    <button id="btn-close-wheel" class="overlay-close-btn floating-surface" aria-label="Glücksrad schließen">
+      ✕ Schließen
+    </button>
+
+    <div class="wheel-hud-left">
+      <span class="wheel-badge">GLÜCKSRAD</span>
+      <div id="wheel-live-label" class="wheel-live-label floating-surface">Bereit…</div>
+      <button id="btn-spin-again-side" class="primary-btn wheel-respin-btn">Drehen!</button>
+    </div>
+
+    <!-- Container für Pfeil (links-mittig) + riesiges Rad rechts außerhalb des Bildschirms -->
+    <div class="wheel-stage">
+      <!-- Der Pfeil sitzt mittig/leicht links und zeigt nach rechts auf das linke Drittel des Rades -->
+      <div id="wheel-pointer" class="wheel-pointer">
+        <svg width="56" height="44" viewBox="0 0 56 44" fill="none">
+          <filter id="pointerShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.6" />
+          </filter>
+          <path d="M4 22 C4 12, 12 6, 22 8 L52 22 L22 36 C12 38, 4 32, 4 22 Z" fill="#FFB800" stroke="#FFF3C4" stroke-width="2.5" filter="url(#pointerShadow)" />
+          <circle cx="18" cy="22" r="5" fill="#151824" />
+        </svg>
+      </div>
+
+      <!-- Das Glücksrad selbst: ragt rechts aus dem Viewport heraus, sodass ca. das linke Drittel sichtbar ist -->
+      <div class="wheel-offscreen-wrapper">
+        <canvas id="wheel-canvas" width="1100" height="1100"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       ZUFALLSMECHANISMUS 2: CS:GO CASE OPENING OVERLAY
+       ======================================================================== -->
+  <div id="case-overlay" class="case-overlay hidden" aria-hidden="true">
+    <!-- Oberer CS:GO Header wie im Screenshot -->
+    <div class="csgo-header">
+      <h2 id="csgo-status-title">Unlock Container</h2>
+      <p id="csgo-status-subtitle" class="csgo-subtitle">Unlock <span id="csgo-case-name">Essensroulette Case</span></p>
+      <div class="csgo-info-row">
+        <span class="csgo-info-icon">i</span>
+        <span>This Container can only be opened once</span>
+      </div>
+    </div>
+
+    <!-- Mittlere Bühne: Kiste + Horizontales Rollband im Spotlight -->
+    <div class="csgo-stage">
+      <!-- Hintergrund-Kiste (wird beim Aufklappen unscharf im Hintergrund wie im Screenshot) -->
+      <div id="csgo-crate-wrapper" class="csgo-crate-wrapper">
+        <div class="csgo-crate">
+          <!-- Deckel der Kiste -->
+          <div id="csgo-crate-lid" class="csgo-crate-lid">
+            <div class="crate-rib"></div>
+            <div class="crate-rib"></div>
+            <div class="crate-rib"></div>
+          </div>
+          <!-- Unterteil der Kiste mit gelben Streifen & Schloss -->
+          <div class="csgo-crate-body">
+            <div class="crate-stripe-left"></div>
+            <div class="crate-center-emblem">
+              <div class="crate-triangle">▲</div>
+              <div class="crate-star">★</div>
+            </div>
+            <!-- Schloss + Schlüssel für die ersten 2 Sekunden -->
+            <div id="csgo-lock-assembly" class="csgo-lock-assembly">
+              <div class="csgo-padlock">🔒</div>
+              <div id="csgo-key-anim" class="csgo-key-anim">🔑</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Horizontales Rollband (erscheint bei Sekunde ~2.05 nach dem Aufklappen) -->
+      <div id="csgo-reel-viewport" class="csgo-reel-viewport hidden">
+        <!-- Runder Spotlight-Effekt wie auf dem CS:GO Screenshot -->
+        <div class="csgo-spotlight-mask"></div>
+        <!-- Die fahrende Boxen-Reihe -->
+        <div id="csgo-reel-track" class="csgo-reel-track"></div>
+        <!-- Gelber vertikaler Indikator-Strich exakt in der Mitte -->
+        <div class="csgo-center-line"></div>
+      </div>
+    </div>
+
+    <!-- Unterer CS:GO Balken wie im Screenshot -->
+    <div class="csgo-footer">
+      <div class="csgo-key-status">
+        <span class="key-icon">🗝️</span>
+        <span>Use <strong>Essensroulette Case Key</strong></span>
+      </div>
+      <div class="csgo-footer-right">
+        <span id="csgo-spinner-ring" class="csgo-spinner-ring"></span>
+        <button id="btn-close-case" class="csgo-close-btn">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       ERGEBNIS-POP-UP ("Es ist Eintrag X geworden!")
+       ======================================================================== -->
+  <div id="winner-modal" class="modal-overlay winner-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-card floating-surface winner-card">
+      <div class="winner-badge">🎉 ENTSCHEIDUNG GEFALLEN</div>
+      <p class="winner-pre">Es ist</p>
+      <h2 id="winner-text" class="winner-title">Pizza</h2>
+      <p class="winner-post">geworden!</p>
+      <div class="modal-actions winner-actions">
+        <button type="button" id="btn-winner-close" class="ghost-btn">Zur Liste</button>
+        <button type="button" id="btn-winner-again" class="primary-btn">Nochmal auslosen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast-Benachrichtigung -->
+  <div id="toast" class="toast floating-surface hidden"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

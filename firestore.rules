@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Collection: randomLists
+    // Nur authentifizierte Nutzer (inkl. anonymer Auth via signInAnonymously)
+    // dürfen Listen lesen, erstellen, bearbeiten und löschen.
+    match /randomLists/{shareCode} {
+      allow read: if request.auth != null;
+
+      // Beim Erstellen muss der Nutzer eingeloggt sein, owner muss seiner UID entsprechen
+      // und entries muss als Liste (Array) initialisiert werden.
+      allow create: if request.auth != null
+                    && request.resource.data.owner == request.auth.uid
+                    && request.resource.data.entries is list;
+
+      // Jeder authentifizierte Nutzer mit dem Teilen-Code darf Einträge hinzufügen/ändern
+      allow update: if request.auth != null
+                    && request.resource.data.entries is list;
+
+      // Optional: Nur der Ersteller (owner) darf die komplette Liste löschen
+      allow delete: if request.auth != null
+                    && resource.data.owner == request.auth.uid;
+    }
+
+    // Alle anderen Pfade standardmäßig blockieren
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
