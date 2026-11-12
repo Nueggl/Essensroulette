@@ -5,6 +5,9 @@ import {
   getDoc,
   updateDoc,
   onSnapshot,
+  collection,
+  query,
+  where,
   arrayUnion,
   arrayRemove,
   serverTimestamp
@@ -169,6 +172,70 @@ export function getSavedLists() {
   } catch {
     return [];
   }
+}
+
+/**
+ * Hört in Echtzeit auf ALLE Listen des aktuellen Nutzers (owner == user.uid).
+ * Findet automatisch auch in der Firebase-Konsole manuell erstellte Listen!
+ * @param {(lists: Array<{ code: string, title: string }>) => void} callback
+ * @returns {Promise<() => void>}
+ */
+export async function listenToMyLists(callback) {
+  const user = await initAuth();
+
+  if (isPlaceholderConfig()) {
+    const checkDemo = () => {
+      const demoDb = getDemoDb();
+      const myLists = Object.entries(demoDb)
+        .filter(([_, data]) => data.owner === user.uid)
+        .map(([code, data]) => ({ code, title: data.title || `Liste #${code}` }));
+      callback(myLists);
+    };
+    checkDemo();
+    return () => {};
+  }
+
+  // Firestore Abfrage: Alle Listen mit owner == aktuelle UID
+  const q = query(collection(db, COLLECTION_NAME), where("owner", "==", user.uid));
+
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const dbLists = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        dbLists.push({
+          code: docSnap.id,
+          title: data.title || `Liste #${docSnap.id}`
+        });
+      });
+
+      // Bestehende lokale Listen (z. B. beigetretene Listen anderer) mit den eigenen DB-Listen verschmelzen
+      const currentSaved = getSavedLists();
+      const mergedMap = new Map();
+
+      // Zuerst die aktuellen eigenen Listen aus der DB eintragen
+      dbLists.forEach((l) => mergedMap.set(l.code, l));
+
+      // Danach eventuell beigetretene fremde Listen beibehalten
+      currentSaved.forEach((l) => {
+        if (!mergedMap.has(l.code)) {
+          mergedMap.set(l.code, l);
+        }
+      });
+
+      const mergedList = Array.from(mergedMap.values());
+      localStorage.setItem(SAVED_LISTS_STORAGE_KEY, JSON.stringify(mergedList));
+
+      callback(mergedList);
+    },
+    (err) => {
+      console.warn("Fehler beim Abrufen der eigenen Listen:", err);
+      callback(getSavedLists());
+    }
+  );
+
+  return unsubscribe;
 }
 
 /* ============================================================================

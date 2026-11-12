@@ -7,6 +7,7 @@ import {
   updateEntry,
   updateListTitle,
   listenToList,
+  listenToMyLists,
   getActiveListCode,
   getSavedLists,
   isPlaceholderConfig
@@ -158,15 +159,27 @@ async function initApp() {
   }
 
   try {
-    await initAuth();
+    const user = await initAuth();
+
+    // Echtzeit-Synchronisation aller eigenen Listen (owner == user.uid)
+    await listenToMyLists((lists) => {
+      renderSavedListsDrawer();
+    });
+
     const existingCode = getActiveListCode();
 
     if (existingCode) {
       await switchToList(existingCode);
     } else {
-      // Beim allerersten Start direkt eine Liste anlegen
-      const newCode = await createNewList("Essensroulette");
-      await switchToList(newCode);
+      // Prüfen, ob der Nutzer in Firestore bereits eigene Listen hat
+      const myLists = getSavedLists();
+      if (myLists.length > 0) {
+        await switchToList(myLists[0].code);
+      } else {
+        // Beim allerersten Start direkt eine Liste anlegen
+        const newCode = await createNewList("Essensroulette");
+        await switchToList(newCode);
+      }
     }
   } catch (error) {
     console.error("Fehler beim App-Start:", error);
@@ -403,20 +416,24 @@ function drawWheel(angleOffset) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
     ctx.fill();
 
-    // Text im linken Drittel (bei Winkel PI) aufrecht lesbar zeichnen:
-    // Durch Rotation um (midAngle + Math.PI) steht der Text auf der linken Radseite (PI) exakt waagerecht (0°)!
+    // Text am äußeren Rand des Glücksrades verankern:
+    // Der Vektor zeigt vom Mittelpunkt nach außen entlang des Segments (midAngle).
+    // Auf der linken Seite (bei 180° / PI) kehren wir die Richtung um (+ Math.PI),
+    // damit der Text aufrecht von links nach rechts (vom Rand nach innen) gelesen wird
+    // und nicht auf dem Kopf steht!
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(midAngle + Math.PI);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#ffffff";
-    ctx.font = count > 12 ? "700 22px Inter, sans-serif" : "700 28px Inter, sans-serif";
-    ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
-    ctx.shadowBlur = 6;
+    ctx.font = count > 12 ? "700 24px Inter, sans-serif" : "700 30px Inter, sans-serif";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
+    ctx.shadowBlur = 8;
 
-    const label = truncateText(entries[i].text, 20);
-    ctx.fillText(label, radius * 0.34, 0);
+    const label = truncateText(entries[i].text, 22);
+    // Beginnt direkt 35px innerhalb des äußeren Randes und läuft nach innen zur Radmitte
+    ctx.fillText(label, -(radius - 35), 0);
     ctx.restore();
   }
 
