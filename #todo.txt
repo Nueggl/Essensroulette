@@ -1,0 +1,2 @@
+-manuelle liste amklicken wählt liste ab und erstellt eine neue (vllt wegen micht alles großbuchstaben in id?)
+-möglichkeit zum löschen einer liste (aufpassen, wenn eigentümer, dann löschen, wenn mitarbeiter, dann nur für sich löschen)
